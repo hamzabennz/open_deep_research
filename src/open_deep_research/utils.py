@@ -804,6 +804,7 @@ MODEL_TOKEN_LIMITS = {
     "anthropic:claude-3-5-haiku": 200000,
     "google:gemini-1.5-pro": 2097152,
     "google:gemini-1.5-flash": 1048576,
+    "google:gemini-2.0-flash": 1048576,
     "google:gemini-pro": 32768,
     "cohere:command-r-plus": 128000,
     "cohere:command-r": 128000,

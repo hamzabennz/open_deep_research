@@ -9,6 +9,9 @@ supabase_url = os.environ.get("SUPABASE_URL")
 supabase_key = os.environ.get("SUPABASE_KEY")
 supabase: Optional[Client] = None
 
+# Allow disabling auth for local/dev via env flag
+DISABLE_AUTH = os.environ.get("DISABLE_AUTH", "false").lower() in {"1", "true", "yes", "on"}
+
 if supabase_url and supabase_key:
     supabase = create_client(supabase_url, supabase_key)
 
@@ -21,6 +24,10 @@ auth = Auth()
 @auth.authenticate
 async def get_current_user(authorization: str | None) -> Auth.types.MinimalUserDict:
     """Check if the user's JWT token is valid using Supabase."""
+
+    # If auth is disabled, allow all requests with a public identity
+    if DISABLE_AUTH:
+        return {"identity": "public"}
 
     # Ensure we have authorization header
     if not authorization:
@@ -39,6 +46,9 @@ async def get_current_user(authorization: str | None) -> Auth.types.MinimalUserD
 
     # Ensure Supabase client is initialized
     if not supabase:
+        # If auth is disabled, allow access; otherwise error
+        if DISABLE_AUTH:
+            return {"identity": "public"}
         raise Auth.exceptions.HTTPException(
             status_code=500, detail="Supabase client not initialized"
         )
