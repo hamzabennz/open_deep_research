@@ -1,5 +1,8 @@
 """Utility functions and helpers for the Deep Research agent."""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import logging
 import os
@@ -446,6 +449,109 @@ def wrap_mcp_authenticate_tool(tool: StructuredTool) -> StructuredTool:
     tool.coroutine = authentication_wrapper
     return tool
 
+async def create_duckduckgo_tools() -> list[BaseTool]:
+    """Create DuckDuckGo search tools.
+    
+    Returns:
+        List of DuckDuckGo search tool instances
+    """
+    from duckduckgo_search import DDGS
+    
+    @tool(description="Search DuckDuckGo for text results (privacy-focused, no tracking)")
+    async def duckduckgo_text_search(
+        query: str,
+        max_results: int = 10,
+        region: str = "wt-wt",
+        safesearch: str = "moderate",
+        timelimit: Optional[str] = None
+    ) -> str:
+        """Search DuckDuckGo for text results.
+        
+        Args:
+            query: Search query keywords
+            max_results: Maximum number of results (default: 10)
+            region: Region code (e.g., 'us-en', 'wt-wt' for worldwide)
+            safesearch: 'on', 'moderate', or 'off'
+            timelimit: Time limit ('d' for day, 'w' for week, 'm' for month, 'y' for year)
+            
+        Returns:
+            Formatted search results with titles, URLs, and snippets
+        """
+        try:
+            ddgs = DDGS()
+            results = ddgs.text(
+                keywords=query,
+                region=region,
+                safesearch=safesearch,
+                timelimit=timelimit,
+                max_results=max_results
+            )
+            
+            if not results:
+                return f"No results found for query: {query}"
+            
+            formatted_results = []
+            for i, result in enumerate(results, 1):
+                formatted_results.append(
+                    f"{i}. {result.get('title', 'No title')}\n"
+                    f"   URL: {result.get('href', 'No URL')}\n"
+                    f"   Snippet: {result.get('body', 'No description')}"
+                )
+            
+            return "\n\n".join(formatted_results)
+        except Exception as e:
+            return f"Error performing DuckDuckGo search: {str(e)}"
+    
+    @tool(description="Search DuckDuckGo for news articles")
+    async def duckduckgo_news_search(
+        query: str,
+        max_results: int = 10,
+        region: str = "wt-wt",
+        safesearch: str = "moderate",
+        timelimit: Optional[str] = None
+    ) -> str:
+        """Search DuckDuckGo for recent news articles.
+        
+        Args:
+            query: Search query keywords
+            max_results: Maximum number of results (default: 10)
+            region: Region code (e.g., 'us-en', 'wt-wt' for worldwide)
+            safesearch: 'on', 'moderate', or 'off'
+            timelimit: Time limit ('d' for day, 'w' for week, 'm' for month)
+            
+        Returns:
+            Formatted news results with titles, dates, URLs, and descriptions
+        """
+        try:
+            ddgs = DDGS()
+            results = ddgs.news(
+                keywords=query,
+                region=region,
+                safesearch=safesearch,
+                timelimit=timelimit,
+                max_results=max_results
+            )
+            
+            if not results:
+                return f"No news found for query: {query}"
+            
+            formatted_results = []
+            for i, result in enumerate(results, 1):
+                formatted_results.append(
+                    f"{i}. {result.get('title', 'No title')}\n"
+                    f"   Date: {result.get('date', 'Unknown date')}\n"
+                    f"   Source: {result.get('source', 'Unknown source')}\n"
+                    f"   URL: {result.get('url', 'No URL')}\n"
+                    f"   Summary: {result.get('body', 'No description')}"
+                )
+            
+            return "\n\n".join(formatted_results)
+        except Exception as e:
+            return f"Error performing DuckDuckGo news search: {str(e)}"
+    
+    return [duckduckgo_text_search, duckduckgo_news_search]
+
+
 async def load_mcp_tools(
     config: RunnableConfig,
     existing_tool_names: set[str],
@@ -460,68 +566,116 @@ async def load_mcp_tools(
         List of configured MCP tools ready for use
     """
     configurable = Configuration.from_runnable_config(config)
+    all_mcp_tools = []
     
-    # Step 1: Handle authentication if required
-    if configurable.mcp_config and configurable.mcp_config.auth_required:
-        mcp_tokens = await fetch_tokens(config)
-    else:
-        mcp_tokens = None
-    
-    # Step 2: Validate configuration requirements
-    config_valid = (
-        configurable.mcp_config and 
-        configurable.mcp_config.url and 
-        configurable.mcp_config.tools and 
-        (mcp_tokens or not configurable.mcp_config.auth_required)
-    )
-    
-    if not config_valid:
-        return []
-    
-    # Step 3: Set up MCP server connection
-    server_url = configurable.mcp_config.url.rstrip("/") + "/mcp"
-    
-    # Configure authentication headers if tokens are available
-    auth_headers = None
-    if mcp_tokens:
-        auth_headers = {"Authorization": f"Bearer {mcp_tokens['access_token']}"}
-    
-    mcp_server_config = {
-        "server_1": {
-            "url": server_url,
-            "headers": auth_headers,
-            "transport": "streamable_http"
-        }
-    }
-    # TODO: When Multi-MCP Server support is merged in OAP, update this code
-    
-    # Step 4: Load tools from MCP server
-    try:
-        client = MultiServerMCPClient(mcp_server_config)
-        available_mcp_tools = await client.get_tools()
-    except Exception:
-        # If MCP server connection fails, return empty list
-        return []
-    
-    # Step 5: Filter and configure tools
-    configured_tools = []
-    for mcp_tool in available_mcp_tools:
-        # Skip tools with conflicting names
-        if mcp_tool.name in existing_tool_names:
-            warnings.warn(
-                f"MCP tool '{mcp_tool.name}' conflicts with existing tool name - skipping"
-            )
-            continue
+    # Step 1: Load standard MCP config tools (existing functionality)
+    if configurable.mcp_config and configurable.mcp_config.url:
+        # Handle authentication if required
+        if configurable.mcp_config.auth_required:
+            mcp_tokens = await fetch_tokens(config)
+        else:
+            mcp_tokens = None
         
-        # Only include tools specified in configuration
-        if mcp_tool.name not in set(configurable.mcp_config.tools):
-            continue
+        # Validate configuration requirements
+        config_valid = (
+            configurable.mcp_config.tools and 
+            (mcp_tokens or not configurable.mcp_config.auth_required)
+        )
         
-        # Wrap tool with authentication handling and add to list
-        enhanced_tool = wrap_mcp_authenticate_tool(mcp_tool)
-        configured_tools.append(enhanced_tool)
+        if config_valid:
+            # Set up MCP server connection
+            server_url = configurable.mcp_config.url.rstrip("/") + "/mcp"
+            
+            # Configure authentication headers if tokens are available
+            auth_headers = None
+            if mcp_tokens:
+                auth_headers = {"Authorization": f"Bearer {mcp_tokens['access_token']}"}
+            
+            mcp_server_config = {
+                "server_1": {
+                    "url": server_url,
+                    "headers": auth_headers,
+                    "transport": "streamable_http"
+                }
+            }
+            
+            # Load tools from MCP server
+            try:
+                client = MultiServerMCPClient(mcp_server_config)
+                available_mcp_tools = await client.get_tools()
+                
+                # Filter and configure tools
+                for mcp_tool in available_mcp_tools:
+                    # Skip tools with conflicting names
+                    if mcp_tool.name in existing_tool_names:
+                        warnings.warn(
+                            f"MCP tool '{mcp_tool.name}' conflicts with existing tool name - skipping"
+                        )
+                        continue
+                    
+                    # Only include tools specified in configuration
+                    if mcp_tool.name not in set(configurable.mcp_config.tools):
+                        continue
+                    
+                    # Wrap tool with authentication handling and add to list
+                    enhanced_tool = wrap_mcp_authenticate_tool(mcp_tool)
+                    all_mcp_tools.append(enhanced_tool)
+            except Exception:
+                # If MCP server connection fails, continue to other MCP sources
+                pass
     
-    return configured_tools
+    # Step 2: Load BrightData MCP if enabled
+    if configurable.enable_brightdata_mcp:
+        brightdata_api_key = os.getenv("BRIGHTDATA_API_KEY")
+        if brightdata_api_key:
+            # BrightData uses SSE (Server-Sent Events) transport
+            brightdata_config = {
+                "brightdata": {
+                    "transport": "sse",
+                    "url": "https://mcp.brightdata.com/sse",
+                    "headers": {
+                        "Accept": "text/event-stream",
+                        "Authorization": f"Bearer {brightdata_api_key}"
+                    },
+                    "timeout": 30.0,
+                    "sse_read_timeout": 300.0
+                }
+            }
+            
+            try:
+                brightdata_client = MultiServerMCPClient(brightdata_config)
+                brightdata_tools = await brightdata_client.get_tools()
+                
+                for tool in brightdata_tools:
+                    if tool.name not in existing_tool_names:
+                        all_mcp_tools.append(tool)
+                        existing_tool_names.add(tool.name)
+                        
+                if brightdata_tools:
+                    logging.info(f"✓ Loaded {len(brightdata_tools)} BrightData MCP tools")
+            except Exception as e:
+                warnings.warn(f"Failed to load BrightData MCP tools: {e}")
+    
+    # Step 3: Load DuckDuckGo MCP if enabled
+    if configurable.enable_duckduckgo_mcp:
+        try:
+            from duckduckgo_search import DDGS
+            
+            # Create DuckDuckGo search tools
+            ddg_tools = await create_duckduckgo_tools()
+            for tool in ddg_tools:
+                if tool.name not in existing_tool_names:
+                    all_mcp_tools.append(tool)
+                    existing_tool_names.add(tool.name)
+            
+            if ddg_tools:
+                logging.info(f"✓ Loaded {len(ddg_tools)} DuckDuckGo MCP tools")
+        except ImportError:
+            warnings.warn("DuckDuckGo MCP enabled but duckduckgo-search library not installed. Run: pip install duckduckgo-search")
+        except Exception as e:
+            warnings.warn(f"Failed to load DuckDuckGo MCP tools: {e}")
+    
+    return all_mcp_tools
 
 
 ##########################
@@ -567,14 +721,17 @@ async def get_search_tool(search_api: SearchAPI):
     return []
     
 async def get_all_tools(config: RunnableConfig):
-    """Assemble complete toolkit including research, search, and MCP tools.
+    """Assemble complete toolkit including research, search, custom tools, and MCP tools.
     
     Args:
-        config: Runtime configuration specifying search API and MCP settings
+        config: Runtime configuration specifying search API, custom tools, and MCP settings
         
     Returns:
         List of all configured and available tools for research operations
     """
+    # Import custom tools
+    from open_deep_research.custom_tools import get_custom_tools
+    
     # Start with core research tools
     tools = [tool(ResearchComplete), think_tool]
     
@@ -590,7 +747,17 @@ async def get_all_tools(config: RunnableConfig):
         for tool in tools
     }
     
-    # Add MCP tools if configured
+    # Add custom tools if enabled
+    if configurable.enable_google_cse:
+        from open_deep_research.custom_tools import get_custom_tools
+        
+        custom_tools = get_custom_tools()
+        for custom_tool in custom_tools:
+            if custom_tool.name not in existing_tool_names:
+                tools.append(custom_tool)
+                existing_tool_names.add(custom_tool.name)
+    
+    # Add MCP tools (includes BrightData if enabled)
     mcp_tools = await load_mcp_tools(config, existing_tool_names)
     tools.extend(mcp_tools)
     
@@ -802,10 +969,10 @@ MODEL_TOKEN_LIMITS = {
     "anthropic:claude-3-7-sonnet": 200000,
     "anthropic:claude-3-5-sonnet": 200000,
     "anthropic:claude-3-5-haiku": 200000,
-    "google:gemini-1.5-pro": 2097152,
-    "google:gemini-1.5-flash": 1048576,
-    "google:gemini-2.0-flash": 1048576,
-    "google:gemini-pro": 32768,
+    "google_genai:gemini-1.5-pro": 2097152,
+    "google_genai:gemini-1.5-flash": 1048576,
+    "google_genai:gemini-2.0-flash": 1048576,
+    "google_genai:gemini-pro": 32768,
     "cohere:command-r-plus": 128000,
     "cohere:command-r": 128000,
     "cohere:command-light": 4096,

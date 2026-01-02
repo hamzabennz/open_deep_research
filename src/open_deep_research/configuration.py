@@ -119,11 +119,11 @@ class Configuration(BaseModel):
     )
     # Model Configuration
     summarization_model: str = Field(
-        default="google:gemini-2.0-flash",
+        default="google_genai:gemini-2.0-flash",
         metadata={
             "x_oap_ui_config": {
                 "type": "text",
-                "default": "google:gemini-2.0-flash",
+                "default": "google_genai:gemini-2.0-flash",
                 "description": "Model for summarizing research results from Tavily search results"
             }
         }
@@ -151,11 +151,11 @@ class Configuration(BaseModel):
         }
     )
     research_model: str = Field(
-        default="google:gemini-2.0-flash",
+        default="google_genai:gemini-2.0-flash",
         metadata={
             "x_oap_ui_config": {
                 "type": "text",
-                "default": "google:gemini-2.0-flash",
+                "default": "google_genai:gemini-2.0-flash",
                 "description": "Model for conducting research. NOTE: Make sure your Researcher Model supports the selected search API."
             }
         }
@@ -171,11 +171,11 @@ class Configuration(BaseModel):
         }
     )
     compression_model: str = Field(
-        default="google:gemini-2.0-flash",
+        default="google_genai:gemini-2.0-flash",
         metadata={
             "x_oap_ui_config": {
                 "type": "text",
-                "default": "google:gemini-2.0-flash",
+                "default": "google_genai:gemini-2.0-flash",
                 "description": "Model for compressing research findings from sub-agents. NOTE: Make sure your Compression Model supports the selected search API."
             }
         }
@@ -191,11 +191,11 @@ class Configuration(BaseModel):
         }
     )
     final_report_model: str = Field(
-        default="google:gemini-2.0-flash",
+        default="google_genai:gemini-2.0-flash",
         metadata={
             "x_oap_ui_config": {
                 "type": "text",
-                "default": "google:gemini-2.0-flash",
+                "default": "google_genai:gemini-2.0-flash",
                 "description": "Model for writing the final report from all research findings"
             }
         }
@@ -228,6 +228,37 @@ class Configuration(BaseModel):
             "x_oap_ui_config": {
                 "type": "text",
                 "description": "Any additional instructions to pass along to the Agent regarding the MCP tools that are available to it."
+            }
+        }
+    )
+    # Custom Tools Configuration
+    enable_google_cse: bool = Field(
+        default=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "boolean",
+                "default": True,
+                "description": "Enable Google Custom Search Engine tool (requires GOOGLE_SEARCH_JSON_API_KEY and GOOGLE_CSE_ID)"
+            }
+        }
+    )
+    enable_brightdata_mcp: bool = Field(
+        default=False,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "boolean",
+                "default": False,
+                "description": "Enable BrightData MCP server for web scraping (requires BRIGHTDATA_API_KEY)"
+            }
+        }
+    )
+    enable_duckduckgo_mcp: bool = Field(
+        default=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "boolean",
+                "default": True,
+                "description": "Enable DuckDuckGo MCP for privacy-focused search (uses duckduckgo-search library)"
             }
         }
     )

@@ -1,5 +1,8 @@
 """Main LangGraph implementation for the Deep Research agent."""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 from typing import Literal
 
@@ -712,6 +715,8 @@ deep_researcher_builder.add_node("final_report_generation", final_report_generat
 
 # Define main workflow edges for sequential execution
 deep_researcher_builder.add_edge(START, "clarify_with_user")                       # Entry point
+deep_researcher_builder.add_edge("clarify_with_user", "write_research_brief")      # Clarification to research brief
+deep_researcher_builder.add_edge("write_research_brief", "research_supervisor")    # Research brief to supervisor
 deep_researcher_builder.add_edge("research_supervisor", "final_report_generation") # Research to report
 deep_researcher_builder.add_edge("final_report_generation", END)                   # Final exit point
 
